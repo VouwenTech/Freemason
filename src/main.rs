@@ -1,5 +1,5 @@
 pub mod api;
-pub mod encryption;
+pub mod crypto;
 
 fn main() {
     println!("Hello, world!");

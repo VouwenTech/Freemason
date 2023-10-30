@@ -1,9 +1,15 @@
 use crate::crypto::sha3_256;
-use crate::crypto::sign_ed25519::{gen_keypair, PublicKey, SecretKey};
+use crate::crypto::utils::generate_nonce;
+use crate::db::security::{derive_rest_key, encrypt_keys_for_storage};
+use crate::crypto::sign_ed25519::{gen_keypair, Signature, PublicKey};
+use crate::crypto::secretbox_chacha20_poly1305::Nonce;
 use crate::db::constants::{SIG_COLLECTION, SIG_ID_COLLECTION, SIG_TTL};
 use polodb_core::bson::doc;
 use polodb_core::Database;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
+
+use super::security::decrypt_keys_from_storage;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DbError {
@@ -13,7 +19,8 @@ pub struct DbError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureEntry {
     pub pk_hash: String,
-    pub keypair: (PublicKey, SecretKey),
+    pub pub_key: Vec<u8>,
+    pub secret_key: Vec<u8>,
     pub ttl: u32,
     pub timestamp: String,
 }
@@ -28,6 +35,9 @@ struct SigId {
 #[derive(Debug, Clone)]
 pub struct SignatureDb {
     url: String,
+    nonce: Nonce,
+    pbkdf2_iterations: NonZeroU32,
+    db_salt_component: [u8; 16],
 }
 
 impl SignatureDb {
@@ -37,7 +47,18 @@ impl SignatureDb {
     ///
     /// * `url` - Database URL
     pub fn new(url: String) -> SignatureDb {
-        SignatureDb { url }
+        let nonce = Nonce::from_slice(&generate_nonce()).unwrap();
+
+        SignatureDb { 
+            url,
+            nonce,
+            pbkdf2_iterations: NonZeroU32::new(100_000).unwrap(),
+            db_salt_component: [
+                // This value was generated from a secure PRNG.
+                0xd6, 0x26, 0x98, 0xda, 0xf4, 0xdc, 0x50, 0x52,
+                0x24, 0xf2, 0x27, 0xd1, 0xfe, 0x39, 0x01, 0x8a
+            ],
+        }
     }
 
     /// Inserts signature data into the database
@@ -117,15 +138,55 @@ impl SignatureDb {
     }
 
     /// Creates a signature entry
-    pub fn create_signature_data() -> SignatureEntry {
+    /// 
+    /// ### Arguments
+    /// 
+    /// * `id` - ID of the signature entry
+    /// * `passphrase` - Passphrase to derive an encryption key from
+    pub fn create_signature_data(&self, id: &str, passphrase: &str) -> SignatureEntry {
         let keypair = gen_keypair();
         let pk_hash = hex::encode(sha3_256::digest(keypair.0.as_ref()));
+        let rest_key = derive_rest_key(id, passphrase, self.db_salt_component, self.pbkdf2_iterations);
+        let (pub_key, secret_key) = encrypt_keys_for_storage(rest_key, &self.nonce, keypair);
 
         SignatureEntry {
-            keypair,
             pk_hash,
+            pub_key,
+            secret_key,
             ttl: SIG_TTL,
             timestamp: "".to_string(),
         }
+    }
+
+    /// Signs a message with the private key of the public key hash
+    /// 
+    /// ### Arguments
+    /// 
+    /// * `id` - ID of the signature entry
+    /// * `passphrase` - Passphrase to derive an encryption key from
+    /// * `message` - Message to sign
+    pub async fn sign_message(&self, id: &str, passphrase: &str, message: Vec<u8>) -> (Signature, PublicKey) {
+        let sig_data = self.get_signature_data(id.to_string()).await.unwrap();
+        let rest_key = derive_rest_key(id, passphrase, self.db_salt_component, self.pbkdf2_iterations);
+        let (pub_key, secret_key) = decrypt_keys_from_storage(rest_key, &self.nonce, (sig_data.pub_key, sig_data.secret_key));
+        let signature = crate::crypto::sign_ed25519::sign_detached(&message, &secret_key);
+
+        (signature, pub_key)
+    }
+
+    /// Verifies a message with the signature
+    /// 
+    /// ### Arguments
+    /// 
+    /// * `id` - ID of the signature entry
+    /// * `passphrase` - Passphrase to derive an encryption key from
+    /// * `message` - Message to verify
+    /// * `signature` - Signature to verify with
+    pub async fn verify_message(&self, id: &str, passphrase: &str, message: Vec<u8>, signature: Signature) -> bool {
+        let sig_data = self.get_signature_data(id.to_string()).await.unwrap();
+        let rest_key = derive_rest_key(id, passphrase, self.db_salt_component, self.pbkdf2_iterations);
+        let (pub_key, _) = decrypt_keys_from_storage(rest_key, &self.nonce, (sig_data.pub_key, sig_data.secret_key));
+
+        crate::crypto::sign_ed25519::verify_detached(&signature, &message, &pub_key)
     }
 }

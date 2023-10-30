@@ -1,5 +1,5 @@
+use crate::crypto::sign_ed25519::Signature;
 use serde::Deserialize;
-use crate::crypto::asymmetric::sign_ed25519::Signature;
 
 #[derive(Deserialize)]
 pub struct ChunkMetadataPayload {

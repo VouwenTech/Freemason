@@ -1,8 +1,8 @@
-use std::convert::Infallible;
-use warp::Filter;
-use std::sync::Arc;
-use futures::lock::Mutex;
 use crate::db::sign_db::{SignatureDb, SignatureEntry};
+use futures::lock::Mutex;
+use std::convert::Infallible;
+use std::sync::Arc;
+use warp::Filter;
 
 /// Easy and simple POST CORS
 pub fn post_cors() -> warp::cors::Builder {
@@ -53,12 +53,18 @@ pub fn with_node_component<T: Clone + Send>(
     warp::any().map(move || comp.clone())
 }
 
-pub async fn retrieve_signing_data_from_db(db: Arc<Mutex<SignatureDb>>, id: String) -> SignatureEntry {
+pub async fn retrieve_signing_data_from_db(
+    db: Arc<Mutex<SignatureDb>>,
+    id: String,
+) -> SignatureEntry {
     match db.lock().await.get_signature_data(id.clone()).await {
         Ok(sig_data) => sig_data,
         Err(_) => {
             let sd = SignatureDb::create_signature_data();
-            let _ = db.lock().await.insert_signature_data(id.clone(), sd.clone());
+            let _ = db
+                .lock()
+                .await
+                .insert_signature_data(id.clone(), sd.clone());
 
             sd
         }

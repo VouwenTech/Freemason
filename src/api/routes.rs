@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use futures::lock::Mutex;
-use warp::{Filter, Rejection, Reply};
-use crate::db::sign_db::SignatureDb;
-use super::handlers::{handle_upload_raw, handle_download, handle_sign, handle_verify};
+use super::handlers::{handle_download, handle_sign, handle_upload_raw, handle_verify};
 use super::utils::{post_cors, with_node_component};
+use crate::db::sign_db::SignatureDb;
+use futures::lock::Mutex;
+use std::sync::Arc;
+use warp::{Filter, Rejection, Reply};
 
 /// POST /upload
-/// 
+///
 /// Uploads a chunk of byte data to the server
 pub fn upload_raw() -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
@@ -18,7 +18,7 @@ pub fn upload_raw() -> impl Filter<Extract = (impl Reply,), Error = Rejection> +
 }
 
 /// POST /download
-/// 
+///
 /// Downloads a chunk of byte data from the server
 pub fn download() -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
@@ -29,9 +29,11 @@ pub fn download() -> impl Filter<Extract = (impl Reply,), Error = Rejection> + C
 }
 
 /// POST /sign
-/// 
+///
 /// Signs a message with the private key of the public key hash
-pub fn sign(sig_db: Arc<Mutex<SignatureDb>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+pub fn sign(
+    sig_db: Arc<Mutex<SignatureDb>>,
+) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
         .and(warp::path("sign"))
         .and(with_node_component(sig_db))
@@ -41,9 +43,11 @@ pub fn sign(sig_db: Arc<Mutex<SignatureDb>>) -> impl Filter<Extract = (impl Repl
 }
 
 /// POST /verify
-/// 
+///
 /// Verifies a message with the signature
-pub fn verify(sig_db: Arc<Mutex<SignatureDb>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+pub fn verify(
+    sig_db: Arc<Mutex<SignatureDb>>,
+) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
         .and(warp::path("verify"))
         .and(with_node_component(sig_db))

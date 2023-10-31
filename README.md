@@ -1,4 +1,4 @@
 ![](assets/hero.png)
 
 # Freemason
-An encryption microservice
+An encryption and encrypted storage microservice

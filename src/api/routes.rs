@@ -33,7 +33,7 @@ pub fn download() -> impl Filter<Extract = (impl Reply,), Error = Rejection> + C
 /// Signs a message with the private key of the public key hash
 pub fn sign(
     sig_db: Arc<Mutex<SignatureDb>>,
-    passphrase: String
+    passphrase: String,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
         .and(warp::path("sign"))
@@ -49,7 +49,7 @@ pub fn sign(
 /// Verifies a message with the signature
 pub fn verify(
     sig_db: Arc<Mutex<SignatureDb>>,
-    passphrase: String
+    passphrase: String,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::post()
         .and(warp::path("verify"))

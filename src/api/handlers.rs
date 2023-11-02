@@ -1,5 +1,6 @@
 use super::interfaces::{ChunkMetadataPayload, DownloadParamsPayload, SigningDataPayload};
 use crate::crypto::secretbox_chacha20_poly1305::{open, seal, Key, Nonce};
+use crate::db::secret_db::SecretDb;
 use crate::db::sign_db::SignatureDb;
 use futures::lock::Mutex;
 use serde_json::json;
@@ -7,9 +8,6 @@ use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use warp::{Rejection, Reply};
-
-const KEY: &[u8; 16] = b"0123456789abcdef"; // Replace with your key
-const NONCE: &[u8; 16] = b"0123456789abcdef";
 
 /// Uploads a chunk of byte data to the server
 ///
@@ -20,24 +18,38 @@ const NONCE: &[u8; 16] = b"0123456789abcdef";
 pub async fn handle_upload_raw(
     metadata: ChunkMetadataPayload,
     chunk: bytes::Bytes,
+    secret_db: Arc<Mutex<SecretDb>>,
+    passphrase: String,
 ) -> Result<impl Reply, Rejection> {
-    let key = Key::from_slice(KEY).unwrap();
-    let nonce = Nonce::from_slice(NONCE).unwrap();
+    let key = Key::new();
+    let nonce = Nonce::new();
+    let sec_db_lock = secret_db.lock().await;
     let encrypted_data = seal(chunk.to_vec(), &nonce, &key).unwrap();
 
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
-        .open(metadata.file_name)
+        .open(metadata.file_name.clone())
         .expect("Failed to open or create file");
 
     file.write_all(&encrypted_data)
         .expect("Failed to write to file");
 
-    Ok(warp::reply::with_status(
-        "Chunk received and encrypted",
-        warp::http::StatusCode::OK,
-    ))
+    // Save secret entry to DB
+    let sec_entry = sec_db_lock.create_secret_entry(
+        &metadata.file_name,
+        &passphrase,
+        metadata.total_chunks,
+        (key, nonce),
+    );
+
+    match sec_db_lock.insert_secret(sec_entry).await {
+        Ok(_) => Ok(warp::reply::with_status(
+            "Chunk received and encrypted",
+            warp::http::StatusCode::OK,
+        )),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
 }
 
 /// Downloads a chunk of byte data from the server
@@ -45,9 +57,16 @@ pub async fn handle_upload_raw(
 /// ### Arguments
 ///
 /// * `params` - Download parameters payload
-pub async fn handle_download(params: DownloadParamsPayload) -> Result<impl Reply, Rejection> {
-    let key = Key::from_slice(KEY).unwrap();
-    let nonce = Nonce::from_slice(NONCE).unwrap();
+pub async fn handle_download(
+    params: DownloadParamsPayload,
+    secret_db: Arc<Mutex<SecretDb>>,
+    passphrase: String,
+) -> Result<impl Reply, Rejection> {
+    let sec_db_lock = secret_db.lock().await;
+    let sec_entry = match sec_db_lock.get_secret(&params.file_name, &passphrase).await {
+        Ok(entry) => entry,
+        Err(e) => return Err(warp::reject::custom(e)),
+    };
 
     let mut file = OpenOptions::new()
         .read(true)
@@ -63,7 +82,7 @@ pub async fn handle_download(params: DownloadParamsPayload) -> Result<impl Reply
         .expect("Failed to read from file");
     let encrypted_chunk = &encrypted_chunk_window[0..read_bytes];
 
-    let decrypted_data = open(encrypted_chunk.to_vec(), &nonce, &key).unwrap();
+    let decrypted_data = open(encrypted_chunk.to_vec(), &sec_entry.nonce, &sec_entry.key).unwrap();
     let is_last_chunk = read_bytes < encrypted_chunk.len();
 
     let response = json!({

@@ -8,3 +8,5 @@ use serde::{Deserialize, Serialize};
 pub struct DbError {
     pub message: String,
 }
+
+impl warp::reject::Reject for DbError {}

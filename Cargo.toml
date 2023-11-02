@@ -16,4 +16,5 @@ ring = "0.17.5"
 serde = { version = "1.0.190", features = ["derive"] }
 serde_json = "1.0.107"
 sha3 = "0.10.8"
+tokio = { version = "1.33.0", features=["full"] }
 warp = "0.3.6"

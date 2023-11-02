@@ -16,6 +16,15 @@ pub struct SecretEntry {
     pub nonce: Vec<u8>,
 }
 
+/// Secret key entry with key and nonce
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretEntryWithKeyAndNonce {
+    pub file_name: String,
+    pub total_chunks: usize,
+    pub key: Key,
+    pub nonce: Nonce,
+}
+
 /// Secret key database
 #[derive(Debug, Clone)]
 pub struct SecretDb {
@@ -65,7 +74,11 @@ impl SecretDb {
     /// ### Arguments
     ///
     /// * `id` - ID of the secret entry
-    pub async fn get_secret(&self, id: &str) -> Result<SecretEntry, DbError> {
+    pub async fn get_secret(
+        &self,
+        id: &str,
+        passphrase: &str,
+    ) -> Result<SecretEntryWithKeyAndNonce, DbError> {
         let db = match Database::open_file(self.url.clone()) {
             Ok(db) => db,
             Err(_) => {
@@ -91,7 +104,19 @@ impl SecretDb {
             }
         };
 
-        Ok(secret_entry)
+        let rest_key = self.security.derive_rest_key(id, passphrase);
+        let (key, nonce) = self.security.decrypt_key_and_nonce_for_storage(
+            rest_key,
+            secret_entry.key,
+            secret_entry.nonce,
+        );
+
+        Ok(SecretEntryWithKeyAndNonce {
+            file_name: secret_entry.file_name,
+            total_chunks: secret_entry.total_chunks,
+            key,
+            nonce,
+        })
     }
 
     /// Creates a secret entry

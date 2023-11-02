@@ -1,4 +1,16 @@
-<img src="assets/hero.png" alt="Freemason logo icon" style="width:150px;margin:0 auto 30px;" />
+<div align="center">
+  <a>
+    <img src="assets/hero.png" alt="Logo" style="width: 150px">
+  </a>
 
-# Freemason
-An encryption and encrypted storage microservice
+  <h2 align="center">Freemason</h3>
+
+  <div>
+  <img src="https://img.shields.io/github/actions/workflow/status/VouwenTech/.github/workflows/rust.yml?branch=main" alt="Pipeline Status" style="display:inline-block"/>
+  </div>
+
+  <p align="center">
+    Encryption and encrypted storage microservice
+    <br />
+    <br />
+  </p>

@@ -1,4 +1,3 @@
-use crate::crypto::sign_ed25519::Signature;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -21,6 +20,6 @@ pub struct SigningDataPayload {
     pub id: String,
     pub message: String,
     pub timestamp: String,
-    pub signature: Option<Signature>,
+    pub signature: Option<String>,
     pub custom_data: Option<String>,
 }

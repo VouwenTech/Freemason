@@ -1,10 +1,8 @@
 use super::security::SecurityAtRest;
 use crate::crypto::sha3_256;
 use crate::crypto::sign_ed25519::{gen_keypair, PublicKey, Signature};
-use crate::db::constants::{SIG_COLLECTION, SIG_ID_COLLECTION, SIG_TTL};
+use crate::db::constants::SIG_TTL;
 use crate::db::DbError;
-use polodb_core::bson::doc;
-use polodb_core::{Collection, Database};
 use serde::{Deserialize, Serialize};
 
 /// Full data for handling a signing, pub/priv keypair
@@ -44,24 +42,6 @@ impl SignatureDb {
         }
     }
 
-    /// Gets the signature and signature ID collections
-    pub async fn get_collections(
-        &self,
-    ) -> Result<(Collection<SignatureEntry>, Collection<SigId>), DbError> {
-        let db = match Database::open_file(self.url.clone()) {
-            Ok(db) => db,
-            Err(_) => {
-                return Err(DbError {
-                    message: "Failed to open database".to_string(),
-                });
-            }
-        };
-        let sig_collection = db.collection(SIG_COLLECTION);
-        let sig_id_collection = db.collection(SIG_ID_COLLECTION);
-
-        Ok((sig_collection, sig_id_collection))
-    }
-
     /// Inserts signature data into the database
     ///
     /// ### Arguments
@@ -73,30 +53,33 @@ impl SignatureDb {
         message_id: String,
         signature_data: SignatureEntry,
     ) -> Result<(), DbError> {
-        let colls = self.get_collections().await;
-
-        if let Ok((sig_collection, sig_id_collection)) = colls {
-            match sig_id_collection.insert_one(SigId {
-                id: message_id,
-                pk_hash: signature_data.pk_hash.clone(),
-            }) {
-                Ok(_) => (),
-                Err(_) => {
-                    return Err(DbError {
-                        message: "Failed to insert signature id".to_string(),
-                    });
-                }
+        let db = match sled::open(self.url.clone()) {
+            Ok(db) => db,
+            Err(_) => {
+                return Err(DbError {
+                    message: "Failed to open database".to_string(),
+                });
             }
+        };
 
-            return match sig_collection.insert_one(signature_data) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(DbError {
-                    message: "Failed to insert signature data".to_string(),
-                }),
-            };
-        }
+        println!("Inserting signature data into the collection");
 
-        Err(colls.err().unwrap())
+        // Inserting the SigId
+        let sig_id_json = serde_json::json!(SigId {
+            id: message_id.clone(),
+            pk_hash: signature_data.pk_hash.clone(),
+        });
+        let sig_id = serde_json::to_vec(&sig_id_json).unwrap();
+        db.insert(message_id, sig_id).unwrap();
+
+        println!("Inserting full signature into the db");
+
+        // Insert SignatureData
+        let sig_data_json = serde_json::json!(signature_data);
+        let sig_data = serde_json::to_vec(&sig_data_json).unwrap();
+        db.insert(signature_data.pk_hash, sig_data).unwrap();
+
+        Ok(())
     }
 
     /// Gets signature data from the database
@@ -105,27 +88,51 @@ impl SignatureDb {
     ///
     /// * `message_id` - Message ID to get signature data for
     pub async fn get_signature_data(&self, message_id: String) -> Result<SignatureEntry, DbError> {
-        let colls = self.get_collections().await;
+        let db = match sled::open(self.url.clone()) {
+            Ok(db) => db,
+            Err(e) => {
+                println!("Error: {}", e);
+                println!("URL: {}", self.url.clone());
+                return Err(DbError {
+                    message: "Failed to open database".to_string(),
+                });
+            }
+        };
 
-        if let Ok((sig_collection, sig_id_collection)) = colls {
-            let sig_id: SigId = match sig_id_collection.find_one(doc! { "id": message_id }) {
-                Ok(sig_id) => sig_id.unwrap(),
-                Err(_) => {
-                    return Err(DbError {
-                        message: "Failed to find signature id".to_string(),
-                    });
-                }
-            };
+        let sig_id: SigId = match db.get(&message_id) {
+            Ok(Some(sig_id_raw)) => serde_json::from_slice(&sig_id_raw).unwrap(),
+            Ok(None) => {
+                println!("No value found for key");
+                return Err(DbError {
+                    message: "No value found for key".to_string(),
+                });
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(DbError {
+                    message: "Failed to get value from database".to_string(),
+                });
+            }
+        };
 
-            return match sig_collection.find_one(doc! { "pk_hash": sig_id.pk_hash }) {
-                Ok(sig_data) => Ok(sig_data.unwrap()),
-                Err(_) => Err(DbError {
-                    message: "Failed to find signature data".to_string(),
-                }),
-            };
+        match db.get(&sig_id.pk_hash) {
+            Ok(Some(sig_data)) => {
+                let sig_data: SignatureEntry = serde_json::from_slice(&sig_data).unwrap();
+                Ok(sig_data)
+            }
+            Ok(None) => {
+                println!("No value found for key");
+                return Err(DbError {
+                    message: "No value found for key".to_string(),
+                });
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(DbError {
+                    message: "Failed to get value from database".to_string(),
+                });
+            }
         }
-
-        Err(colls.err().unwrap())
     }
 
     /// Creates a signature entry
@@ -161,15 +168,38 @@ impl SignatureDb {
         id: &str,
         passphrase: &str,
         message: Vec<u8>,
-    ) -> (Signature, PublicKey) {
-        let sig_data = self.get_signature_data(id.to_string()).await.unwrap();
-        let rest_key = self.security.derive_rest_key(id, passphrase);
-        let (pub_key, secret_key) = self
-            .security
-            .decrypt_keys_from_storage(rest_key, (sig_data.pub_key, sig_data.secret_key));
-        let signature = crate::crypto::sign_ed25519::sign_detached(&message, &secret_key);
+    ) -> Option<(Signature, PublicKey)> {
+        let sig_data = match self.get_signature_data(id.to_string()).await {
+            Ok(sig_data) => sig_data,
+            Err(_) => {
+                let sig_data = self.create_signature_data(id, passphrase);
 
-        (signature, pub_key)
+                match self
+                    .insert_signature_data(id.to_string(), sig_data.clone())
+                    .await
+                {
+                    Ok(_) => sig_data,
+                    Err(e) => {
+                        println!("Error: {:?}", e);
+                        panic!("Failed to insert signature data");
+                    }
+                }
+            }
+        };
+
+        println!("Now deriving rest key and continuing");
+
+        let rest_key = self.security.derive_rest_key(id, passphrase);
+        if let Some((pub_key, secret_key)) = self
+            .security
+            .decrypt_keys_from_storage(rest_key, (sig_data.pub_key, sig_data.secret_key))
+        {
+            let signature = crate::crypto::sign_ed25519::sign_detached(&message, &secret_key);
+
+            return Some((signature, pub_key));
+        }
+
+        None
     }
 
     /// Verifies a message with the signature
@@ -189,10 +219,14 @@ impl SignatureDb {
     ) -> bool {
         let sig_data = self.get_signature_data(id.to_string()).await.unwrap();
         let rest_key = self.security.derive_rest_key(id, passphrase);
-        let (pub_key, _) = self
-            .security
-            .decrypt_keys_from_storage(rest_key, (sig_data.pub_key, sig_data.secret_key));
 
-        crate::crypto::sign_ed25519::verify_detached(&signature, &message, &pub_key)
+        if let Some((pub_key, _)) = self
+            .security
+            .decrypt_keys_from_storage(rest_key, (sig_data.pub_key, sig_data.secret_key))
+        {
+            return crate::crypto::sign_ed25519::verify_detached(&signature, &message, &pub_key);
+        }
+
+        false
     }
 }

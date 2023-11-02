@@ -1,9 +1,6 @@
-use polodb_core::bson::doc;
-use polodb_core::Database;
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::secretbox_chacha20_poly1305::{Key, Nonce};
-use crate::db::constants::SECRET_COLLECTION;
 use crate::db::security::SecurityAtRest;
 use crate::db::DbError;
 
@@ -51,7 +48,7 @@ impl SecretDb {
     ///
     /// * `secret_entry` - Secret entry to insert
     pub async fn insert_secret(&self, secret_entry: SecretEntry) -> Result<(), DbError> {
-        let db = match Database::open_file(self.url.clone()) {
+        let db = match sled::open(self.url.clone()) {
             Ok(db) => db,
             Err(_) => {
                 return Err(DbError {
@@ -59,9 +56,12 @@ impl SecretDb {
                 });
             }
         };
-        let sec_collection = db.collection(SECRET_COLLECTION);
 
-        match sec_collection.insert_one(secret_entry) {
+        // Serialise secret_entry
+        let sec_json = serde_json::json!(secret_entry);
+        let sec_entry = serde_json::to_vec(&sec_json).unwrap();
+
+        match db.insert(secret_entry.file_name, sec_entry) {
             Ok(_) => Ok(()),
             Err(_) => Err(DbError {
                 message: "Failed to insert secret data".to_string(),
@@ -79,7 +79,7 @@ impl SecretDb {
         id: &str,
         passphrase: &str,
     ) -> Result<SecretEntryWithKeyAndNonce, DbError> {
-        let db = match Database::open_file(self.url.clone()) {
+        let db = match sled::open(self.url.clone()) {
             Ok(db) => db,
             Err(_) => {
                 return Err(DbError {
@@ -87,11 +87,9 @@ impl SecretDb {
                 });
             }
         };
-        let sec_collection = db.collection(SECRET_COLLECTION);
 
-        let filter = doc! { "file_name": id };
-        let secret_entry: SecretEntry = match sec_collection.find_one(filter) {
-            Ok(Some(entry)) => entry,
+        let secret_entry: SecretEntry = match db.get(id) {
+            Ok(Some(entry)) => serde_json::from_slice(&entry).unwrap(),
             Ok(None) => {
                 return Err(DbError {
                     message: "Failed to find secret data".to_string(),

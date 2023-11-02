@@ -149,13 +149,17 @@ impl SecurityAtRest {
         &self,
         rest_key: [u8; CREDENTIAL_LEN],
         keypair: (Vec<u8>, Vec<u8>),
-    ) -> (PublicKey, SecretKey) {
+    ) -> Option<(PublicKey, SecretKey)> {
         let pub_key = open(keypair.0, &self.nonce, &Key::from_slice(&rest_key).unwrap());
         let secret_key = open(keypair.1, &self.nonce, &Key::from_slice(&rest_key).unwrap());
 
-        (
-            PublicKey::from_slice(&pub_key.unwrap()).unwrap(),
-            SecretKey::from_slice(&secret_key.unwrap()).unwrap(),
-        )
+        if pub_key.is_some() && secret_key.is_some() {
+            return Some((
+                PublicKey::from_slice(&pub_key.unwrap()).unwrap(),
+                SecretKey::from_slice(&secret_key.unwrap()).unwrap(),
+            ));
+        }
+
+        None
     }
 }

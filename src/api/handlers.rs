@@ -1,7 +1,9 @@
 use super::interfaces::{ChunkMetadataPayload, DownloadParamsPayload, SigningDataPayload};
 use crate::crypto::secretbox_chacha20_poly1305::{open, seal, Key, Nonce};
+use crate::crypto::sign_ed25519::Signature;
 use crate::db::secret_db::SecretDb;
 use crate::db::sign_db::SignatureDb;
+use crate::db::DbError;
 use futures::lock::Mutex;
 use serde_json::json;
 use std::fs::OpenOptions;
@@ -105,19 +107,26 @@ pub async fn handle_sign(
     passphrase: String,
 ) -> Result<impl Reply, Rejection> {
     let id = message_payload.id.clone();
-    let (signature, pub_key) = signature_db
+    let sign_option = signature_db
         .lock()
         .await
         .sign_message(&id, &passphrase, message_payload.message.into())
         .await;
+    if let Some((signature, pub_key)) = sign_option {
+        let hex_sig = hex::encode(signature);
 
-    let response = json!({
-        "signature": signature,
-        "public_key": pub_key,
-        "message_id": message_payload.id
-    });
+        let response = json!({
+            "signature": hex_sig,
+            "public_key": pub_key,
+            "message_id": message_payload.id
+        });
 
-    Ok(warp::reply::json(&response))
+        return Ok(warp::reply::json(&response));
+    }
+
+    Err(warp::reject::custom(DbError {
+        message: "Failed to sign message".to_string(),
+    }))
 }
 
 /// Verifies a message with the provided signature
@@ -135,15 +144,26 @@ pub async fn handle_verify(
     passphrase: String,
 ) -> Result<impl Reply, Rejection> {
     let id = message_payload.id.clone();
+    let sig = match message_payload.signature {
+        Some(sig) => match Signature::from_slice(&hex::decode(sig).unwrap()) {
+            Some(sig) => sig,
+            None => {
+                return Err(warp::reject::custom(DbError {
+                    message: "Failed to decode signature".to_string(),
+                }));
+            }
+        },
+        None => {
+            return Err(warp::reject::custom(DbError {
+                message: "Signature not provided".to_string(),
+            }));
+        }
+    };
+
     let verification = signature_db
         .lock()
         .await
-        .verify_message(
-            &id,
-            &passphrase,
-            message_payload.message.into(),
-            message_payload.signature.unwrap(),
-        )
+        .verify_message(&id, &passphrase, message_payload.message.into(), sig)
         .await;
 
     let response = json!({

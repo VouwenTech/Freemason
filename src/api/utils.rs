@@ -17,7 +17,7 @@ pub fn post_cors() -> warp::cors::Builder {
             "Access-Control-Allow-Headers",
             "Content-Type",
         ])
-        .allow_methods(vec!["POST"])
+        .allow_methods(vec!["POST", "OPTIONS"])
 }
 
 /// Easy and simple GET CORS
@@ -36,7 +36,7 @@ pub fn get_cors() -> warp::cors::Builder {
             "Access-Control-Allow-Headers",
             "Content-Type",
         ])
-        .allow_methods(vec!["GET"])
+        .allow_methods(vec!["GET", "OPTIONS"])
 }
 
 /// Clone component/struct to use in route

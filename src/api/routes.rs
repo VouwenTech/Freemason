@@ -1,72 +1,16 @@
-use super::handlers::{handle_download, handle_sign, handle_upload_raw, handle_verify};
-use super::utils::{post_cors, with_node_component};
-use crate::db::secret_db::SecretDb;
-use crate::db::sign_db::SignatureDb;
-use futures::lock::Mutex;
-use std::sync::Arc;
-use warp::{Filter, Rejection, Reply};
+It seems the provided code is a code review more than actual code which lead to misuse of symbols as the ` character has special meaning within actual code. The error logs suggests that several function names are missing or possibly typo'd. To resolve this issue, it's important to ensure the functions are correctly defined and appropriately named. Here are some potential fixes:
 
-/// POST /upload
-///
-/// Uploads a chunk of byte data to the server
-pub fn upload_raw(
-    secret_db: Arc<Mutex<SecretDb>>,
-    passphrase: String,
-) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::post()
-        .and(warp::path("upload"))
-        .and(with_node_component(secret_db))
-        .and(with_node_component(passphrase))
-        .and(warp::body::json())
-        .and(warp::body::bytes())
-        .and_then(move |db, pp, metadata, chunk| handle_upload_raw(metadata, chunk, db, pp))
-        .with(post_cors())
-}
+1. The function `handle_health_ping` seems not exist in the code base. Please replace all calls to `handle_health_ping` with calls to `handle_health` if that function exists. 
 
-/// POST /download
-///
-/// Downloads a chunk of byte data from the server
-pub fn download(
-    secret_db: Arc<Mutex<SecretDb>>,
-    passphrase: String,
-) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::post()
-        .and(warp::path("download"))
-        .and(with_node_component(secret_db))
-        .and(with_node_component(passphrase))
-        .and(warp::body::json())
-        .and_then(move |db, pp, params| handle_download(params, db, pp))
-        .with(post_cors())
-}
+2. The functions `sign` and `verify` appear to be missing from the import statements or are not defined correctly. Have a look at the `crypto` module and make sure the mentioned functions are correctly defined and imported. If these are third party libraries, ensure that they are added to your dependencies in your `Cargo.toml`. You might need to import them explicitly by adding these lines at the top of your file:
 
-/// POST /sign
-///
-/// Signs a message with the private key of the public key hash
-pub fn sign(
-    sig_db: Arc<Mutex<SignatureDb>>,
-    passphrase: String,
-) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::post()
-        .and(warp::path("sign"))
-        .and(with_node_component(sig_db))
-        .and(with_node_component(passphrase))
-        .and(warp::body::json())
-        .and_then(move |db, pp, signing_data| handle_sign(db, signing_data, pp))
-        .with(post_cors())
-}
+    ```
+    use ring::hmac::sign;
+    use ring::hmac::verify;
+    ```
 
-/// POST /verify
-///
-/// Verifies a message with the signature
-pub fn verify(
-    sig_db: Arc<Mutex<SignatureDb>>,
-    passphrase: String,
-) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::post()
-        .and(warp::path("verify"))
-        .and(with_node_component(sig_db))
-        .and(with_node_component(passphrase))
-        .and(warp::body::json())
-        .and_then(move |db, pp, signing_data| handle_verify(db, signing_data, pp))
-        .with(post_cors())
-}
+3. Similarly, the functions `upload_raw` and `download` appear to be missing. Review where these functions should be coming from and add appropriate import statements.
+
+4. Lastly, take a look at `src/api/routes.rs` file, it seems this file includes erroneous content which appears to be parts of an error message rather than valid Rust syntax. You'll want to fix these lines to be valid Rust code.
+
+Without more context and access to the full source code, it's more challenging to suggest more concrete changes. However, incorporating these aspects should help resolve some of the issues you're facing.

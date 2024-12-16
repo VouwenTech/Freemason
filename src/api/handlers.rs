@@ -9,6 +9,7 @@ use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::time::SystemTime;
 use warp::{Rejection, Reply};
 
 /// Responds to a 'ping' request with a 'pong' response
@@ -16,6 +17,20 @@ use warp::{Rejection, Reply};
 pub async fn handle_ping() -> Result<impl Reply, Rejection> {
     Ok(warp::reply::with_status("pong", warp::http::StatusCode::OK))
 }
+
+/// Responds to a 'health' ping request with a "healthy" status and the server's uptime in seconds
+///
+pub async fn handle_health() -> Result<impl Reply, Rejection> {
+    let uptime = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).
+                        expect("System time before UNIX_EPOCH").as_secs();
+    let response = json!({
+        "status": "healthy",
+        "uptime": uptime
+    });
+
+    Ok(warp::reply::json(&response))
+}
+
 
 /// Uploads a chunk of byte data to the server
 ///

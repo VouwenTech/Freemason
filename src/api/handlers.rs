@@ -17,6 +17,12 @@ pub async fn handle_ping() -> Result<impl Reply, Rejection> {
     Ok(warp::reply::with_status("pong", warp::http::StatusCode::OK))
 }
 
+/// Responds to a 'health_ping' request with the application's current state
+///
+pub async fn handle_health_ping() -> Result<impl Reply, Rejection> {
+    Ok(warp::reply::with_status("Application's current state", warp::http::StatusCode::OK))
+}
+
 /// Uploads a chunk of byte data to the server
 ///
 /// ### Arguments

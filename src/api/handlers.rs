@@ -11,6 +11,12 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use warp::{Rejection, Reply};
 
+/// Responds to a 'ping' request with a 'pong' response
+///
+pub async fn handle_ping() -> Result<impl Reply, Rejection> {
+    Ok(warp::reply::with_status("pong", warp::http::StatusCode::OK))
+}
+
 /// Uploads a chunk of byte data to the server
 ///
 /// ### Arguments

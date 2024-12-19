@@ -23,3 +23,11 @@ pub struct SigningDataPayload {
     pub signature: Option<String>,
     pub custom_data: Option<String>,
 }
+
+#[derive(serde::Deserialize)]
+pub struct ServiceStatusPayload {
+    pub service_id: String,
+    pub status: String,
+    pub timestamp: String,
+    pub additional_info: Option<String>,
+}

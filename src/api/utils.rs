@@ -1,5 +1,24 @@
 use std::convert::Infallible;
 use warp::Filter;
+use serde_json::json;
+use std::process::Command;
+
+/// Fetch or calculate the service status information
+/// and encode it into JSON format.
+pub fn fetch_service_status() -> String {
+    let output = Command::new("systemctl")
+                    .arg("status")
+                    .output()
+                    .expect("Failed to fetch service status");
+    let status = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // Encode the status to JSON format
+    let json = json!({
+        "Service Status": status
+    });
+
+    json.to_string()
+}
 
 /// Easy and simple POST CORS
 pub fn post_cors() -> warp::cors::Builder {

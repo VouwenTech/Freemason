@@ -15,10 +15,13 @@ async fn main() {
     let sig_db = Arc::new(Mutex::new(SignatureDb::new("db/signatures".to_string())));
     let sec_db = Arc::new(Mutex::new(SecretDb::new("db/secret".to_string())));
 
+    let service_status = warp::path("service-status").map(move || handlers::service_status(())).boxed();
+
     let routes = upload_raw(sec_db.clone(), passphrase.clone())
-        .or(download(sec_db, passphrase.clone()))
+        .or(download(sec_db.clone(), passphrase.clone()))
         .or(sign(sig_db.clone(), passphrase.clone()))
-        .or(verify(sig_db, passphrase));
+        .or(verify(sig_db.clone(), passphrase.clone()))
+        .or(service_status);
 
     println!("Server running on port 3030");
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;

@@ -1,4 +1,4 @@
-use super::handlers::{handle_download, handle_sign, handle_upload_raw, handle_verify};
+use super::handlers::{handle_download, handle_sign, handle_upload_raw, handle_verify, handle_new_route};
 use super::utils::{post_cors, with_node_component};
 use crate::db::secret_db::SecretDb;
 use crate::db::sign_db::SignatureDb;
@@ -68,5 +68,21 @@ pub fn verify(
         .and(with_node_component(passphrase))
         .and(warp::body::json())
         .and_then(move |db, pp, signing_data| handle_verify(db, signing_data, pp))
+        .with(post_cors())
+}
+
+/// POST /new_route
+///
+/// Handles the new route
+pub fn new_route(
+    db_: Arc<Mutex<CustomDb>>,
+    passphrase: String,
+) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+    warp::post()
+        .and(warp::path("new_route"))
+        .and(with_node_component(db_))
+        .and(with_node_component(passphrase))
+        .and(warp::body::json())
+        .and_then(move |db, pp, request_data| handle_new_route(db, request_data, pp))
         .with(post_cors())
 }

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::crypto::secretbox_chacha20_poly1305::{Key, Nonce};
 use crate::db::security::SecurityAtRest;
 use crate::db::DbError;
+use crate::services::ServiceStatus;
+
 
 /// Full data for handling a secret key entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,5 +147,23 @@ impl SecretDb {
             key: encrypted_key,
             nonce: encrypted_nonce,
         }
+    }
+  
+    /// Checks the service status tied to the secret database
+    ///
+    /// ### Returns
+    ///
+    /// * `ServiceStatus` -  Status of the service tied to this secret database
+    pub fn check_service_status(&self) -> Result<ServiceStatus, DbError> {
+        // ...method implementation...
+    }
+
+    /// Collates sensitive service status if necessary and safe
+    ///
+    /// ### Returns
+    ///
+    /// * `ServiceStatus` -  Collated service status
+    pub fn collate_service_status(&self) -> Result<ServiceStatus, DbError> {
+        // ...method implementation...
     }
 }

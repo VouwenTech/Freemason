@@ -3,6 +3,7 @@ use crate::crypto::secretbox_chacha20_poly1305::{open, seal, Key, Nonce};
 use crate::crypto::sign_ed25519::Signature;
 use crate::db::secret_db::SecretDb;
 use crate::db::sign_db::SignatureDb;
+use crate::db::status_db::StatusDb;
 use crate::db::DbError;
 use futures::lock::Mutex;
 use serde_json::json;
@@ -175,6 +176,27 @@ pub async fn handle_verify(
     let response = json!({
         "verification": verification,
         "message_id": message_payload.id
+    });
+
+    Ok(warp::reply::json(&response))
+}
+
+/// Fetches the status information from the database
+///
+/// ### Arguments
+///
+/// * `status_db` - Status database
+pub async fn handle_get_status(
+   status_db: Arc<Mutex<StatusDb>>,
+) -> Result<impl Reply, Rejection> {
+    let status_db_lock = status_db.lock().await;
+    let status = match status_db_lock.get_status().await {
+        Ok(status) => status,
+        Err(e) => return Err(warp::reject::custom(e)),
+    };
+
+    let response = json!({
+        "status": status,
     });
 
     Ok(warp::reply::json(&response))

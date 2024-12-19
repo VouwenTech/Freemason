@@ -49,3 +49,23 @@ pub fn with_node_component<T: Clone + Send>(
 ) -> impl Filter<Extract = (T,), Error = Infallible> + Clone {
     warp::any().map(move || comp.clone())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::test::request;
+
+    #[tokio::test]
+    async fn test_handle_ping() {
+        let response = request()
+            .method("GET")
+            .path("/ping")
+            .reply(&handle_ping())
+            .await;
+
+        assert_eq!(response.status(), 200);
+
+        let expected_json = "{\"success\":true}";
+        assert_eq!(response.body(), &expected_json);
+    }
+}

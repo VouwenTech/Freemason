@@ -1,10 +1,20 @@
-use super::handlers::{handle_download, handle_sign, handle_upload_raw, handle_verify};
+use super::handlers::{handle_download, handle_ping, handle_sign, handle_upload_raw, handle_verify};
 use super::utils::{post_cors, with_node_component};
 use crate::db::secret_db::SecretDb;
 use crate::db::sign_db::SignatureDb;
 use futures::lock::Mutex;
 use std::sync::Arc;
 use warp::{Filter, Rejection, Reply};
+
+/// GET /ping
+///
+/// Responds with a 'pong' when the server is alive
+pub fn ping() -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+    warp::get()
+    .and(warp::path("ping"))
+    .and_then(handle_ping)
+    .with(post_cors())
+}
 
 /// POST /upload
 ///
